@@ -1,0 +1,175 @@
+package main
+
+import (
+	"image/color"
+	"math/rand/v2"
+
+	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/hajimehoshi/ebiten/v2/vector"
+	"github.com/mlange-42/ark/ecs"
+)
+
+func NewStars() System {
+	return NewSystem(
+		new(StarPopulator),
+		new(StarMover),
+		new(StarLighter),
+		new(StarResetter),
+		new(StarDrawer),
+	)
+}
+
+type From struct {
+	X, Y float32
+}
+
+type To struct {
+	X, Y float32
+}
+
+type Brightness struct {
+	V float32
+}
+
+type Batch struct {
+	ecs.RelationMarker
+}
+
+type StarPopulator struct {
+	builder *ecs.Map4[From, To, Brightness, Batch]
+	filter  *ecs.Filter4[From, To, Brightness, Batch]
+	batches []starBatch
+}
+
+type starBatch struct {
+	ID   ecs.Entity
+	Size int
+}
+
+func (s *StarPopulator) Initialize(w *ecs.World) {
+	s.builder = s.builder.New(w)
+	s.filter = s.filter.New(w)
+}
+
+func (s *StarPopulator) Update(w *ecs.World) {
+	settings := ecs.GetResource[Settings](w)
+
+	starsCount := 0
+	cutIndex := -1
+	for i, batch := range s.batches {
+		if starsCount+batch.Size > settings.StarsCount {
+			cutIndex = i
+			break
+		}
+		starsCount += batch.Size
+	}
+	if cutIndex != -1 {
+		for i := cutIndex; i < len(s.batches); i++ {
+			batch := s.batches[i]
+			s.builder.RemoveBatch(s.filter.Batch(ecs.Rel[Batch](batch.ID)), nil)
+			w.RemoveEntity(batch.ID)
+		}
+		s.batches = s.batches[:cutIndex]
+	}
+	if starsCount < settings.StarsCount {
+		id := w.NewEntity()
+		size := settings.StarsCount - starsCount
+		init := func(_ ecs.Entity, from *From, to *To, br *Brightness, _ *Batch) {
+			resetStar(from, to, br, settings)
+		}
+		s.builder.NewBatchFn(size, init, ecs.Rel[Batch](id))
+		s.batches = append(s.batches, starBatch{id, size})
+	}
+}
+
+func resetStar(from *From, to *To, br *Brightness, set *Settings) {
+	to.X = rand.Float32() * set.ScreenWidth * set.Scale
+	to.Y = rand.Float32() * set.ScreenHeight * set.Scale
+	from.X = to.X
+	from.Y = to.Y
+	br.V = rand.Float32() * 0xff
+}
+
+type StarMover struct {
+	filter *ecs.Filter2[From, To]
+}
+
+func (s *StarMover) Initialize(w *ecs.World) {
+	s.filter = s.filter.New(w)
+}
+
+func (s *StarMover) Update(w *ecs.World) {
+	set := ecs.GetResource[Settings](w)
+	mouseX, mouseY := ebiten.CursorPosition()
+	x, y := float32(mouseX)*set.Scale, float32(mouseY)*set.Scale
+
+	query := s.filter.Query()
+	for query.Next() {
+		from, to := query.Get()
+		from.X = to.X
+		from.Y = to.Y
+		to.X += (to.X - x) / set.Speed
+		to.Y += (to.Y - y) / set.Speed
+	}
+}
+
+type StarResetter struct {
+	filter *ecs.Filter3[From, To, Brightness]
+}
+
+func (s *StarResetter) Initialize(w *ecs.World) {
+	s.filter = s.filter.New(w)
+}
+
+func (s *StarResetter) Update(w *ecs.World) {
+	set := ecs.GetResource[Settings](w)
+
+	query := s.filter.Query()
+	for query.Next() {
+		from, to, br := query.Get()
+
+		if from.X < 0 || set.ScreenWidth*set.Scale < from.X ||
+			from.Y < 0 || set.ScreenHeight*set.Scale < from.Y {
+			resetStar(from, to, br, set)
+		}
+	}
+}
+
+type StarLighter struct {
+	filter *ecs.Filter1[Brightness]
+}
+
+func (s *StarLighter) Initialize(w *ecs.World) {
+	s.filter = s.filter.New(w)
+}
+
+func (s *StarLighter) Update(w *ecs.World) {
+	query := s.filter.Query()
+	for query.Next() {
+		br := query.Get()
+		br.V = min(0xff, br.V+1)
+	}
+}
+
+type StarDrawer struct {
+	filter *ecs.Filter3[From, To, Brightness]
+}
+
+func (s *StarDrawer) Initialize(w *ecs.World) {
+	s.filter = s.filter.New(w)
+}
+
+func (s *StarDrawer) Draw(w *ecs.World, screen *ebiten.Image) {
+	scale := ecs.GetResource[Settings](w).Scale
+	query := s.filter.Query()
+	for query.Next() {
+		from, to, br := query.Get()
+		c := color.RGBA{
+			R: uint8(0xbb * br.V / 0xff),
+			G: uint8(0xdd * br.V / 0xff),
+			B: uint8(0xff * br.V / 0xff),
+			A: 0xff,
+		}
+		vector.StrokeLine(screen, from.X/scale, from.Y/scale, to.X/scale, to.Y/scale, 1, c, false)
+	}
+}
