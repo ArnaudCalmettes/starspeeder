@@ -74,8 +74,7 @@ func (s *StarPopulator) Update(w *ecs.World) {
 	}
 	if cutIndex != -1 {
 		// Remove all batches that have too many stars.
-		for i := cutIndex; i < len(s.batches); i++ {
-			batch := s.batches[i]
+		for _, batch := range s.batches[cutIndex:] {
 			s.builder.RemoveBatch(s.filter.Batch(ecs.Rel[Batch](batch.ID)), nil)
 			w.RemoveEntity(batch.ID)
 		}
@@ -87,14 +86,15 @@ func (s *StarPopulator) Update(w *ecs.World) {
 		id := w.NewEntity()
 		size := settings.StarsCount - starsCount
 		init := func(_ ecs.Entity, from *From, to *To, br *Brightness, _ *Batch) {
-			resetStar(from, to, br, settings)
+			initStar(from, to, br, settings)
 		}
 		s.builder.NewBatchFn(size, init, ecs.Rel[Batch](id))
 		s.batches = append(s.batches, starBatch{id, size})
 	}
 }
 
-func resetStar(from *From, to *To, br *Brightness, set *Settings) {
+// initStar initializes a star's components.
+func initStar(from *From, to *To, br *Brightness, set *Settings) {
 	to.X = rand.Float32() * set.ScreenWidth * set.Scale
 	to.Y = rand.Float32() * set.ScreenHeight * set.Scale
 	from.X = to.X
@@ -144,7 +144,8 @@ func (s *StarResetter) Update(w *ecs.World) {
 
 		if from.X < 0 || set.ScreenWidth*set.Scale < from.X ||
 			from.Y < 0 || set.ScreenHeight*set.Scale < from.Y {
-			resetStar(from, to, br, set)
+			// reuse the star by resetting it
+			initStar(from, to, br, set)
 		}
 	}
 }
