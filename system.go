@@ -7,6 +7,7 @@ import (
 	"github.com/mlange-42/ark/ecs"
 )
 
+// A System is responsible for updating or rendering some aspect of the game.
 type System interface {
 	Initializer
 	Updater
@@ -14,14 +15,18 @@ type System interface {
 }
 
 type Initializer interface {
+	// Initialize initializes the system.
+	// It is called exactly once before subsequent calls to Update() or Draw() occurs.
 	Initialize(w *ecs.World)
 }
 
 type Updater interface {
+	// Update updates the game's simulation by one step.
 	Update(w *ecs.World)
 }
 
 type Drawer interface {
+	// Drawer draws one frame of the game.
 	Draw(w *ecs.World, screen *ebiten.Image)
 }
 
@@ -31,6 +36,9 @@ type BaseSystem struct {
 	drawers      []Drawer
 }
 
+// NewSystem builds a system from a sequence of subsystems.
+// Subsystems can have any combination of the system's methods.
+// Subsystems are garanteed to run in the order they are passed.
 func NewSystem(subs ...any) System {
 	s := new(BaseSystem)
 	for _, sub := range subs {

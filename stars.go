@@ -19,22 +19,31 @@ func NewStars() System {
 	)
 }
 
+// Components
+
+// From holds a star segment's source point.
 type From struct {
 	X, Y float32
 }
 
+// To holds a star segment's destination point.
 type To struct {
 	X, Y float32
 }
 
+// Brightness holds a star's brightness.
 type Brightness struct {
 	V float32
 }
 
+// Batch relation is used when creating or deleting batches of stars.
 type Batch struct {
 	ecs.RelationMarker
 }
 
+// The StarPopulator system is responsible for matching the number of stars in the simulation
+// with settings.StarsCount.
+// It typically creates or deletes stars by batches whose size grows or shrinks in powers of 2.
 type StarPopulator struct {
 	builder *ecs.Map4[From, To, Brightness, Batch]
 	filter  *ecs.Filter4[From, To, Brightness, Batch]
@@ -64,6 +73,7 @@ func (s *StarPopulator) Update(w *ecs.World) {
 		starsCount += batch.Size
 	}
 	if cutIndex != -1 {
+		// Remove all batches that have too many stars.
 		for i := cutIndex; i < len(s.batches); i++ {
 			batch := s.batches[i]
 			s.builder.RemoveBatch(s.filter.Batch(ecs.Rel[Batch](batch.ID)), nil)
@@ -71,7 +81,9 @@ func (s *StarPopulator) Update(w *ecs.World) {
 		}
 		s.batches = s.batches[:cutIndex]
 	}
+
 	if starsCount < settings.StarsCount {
+		// Add a new batch of stars to match the desired count.
 		id := w.NewEntity()
 		size := settings.StarsCount - starsCount
 		init := func(_ ecs.Entity, from *From, to *To, br *Brightness, _ *Batch) {
@@ -90,6 +102,7 @@ func resetStar(from *From, to *To, br *Brightness, set *Settings) {
 	br.V = rand.Float32() * 0xff
 }
 
+// The StarMover moves the stars by pulling them away from the mouse cursor.
 type StarMover struct {
 	filter *ecs.Filter2[From, To]
 }
@@ -113,6 +126,7 @@ func (s *StarMover) Update(w *ecs.World) {
 	}
 }
 
+// The StarResetter resets stars when they go out of screen.
 type StarResetter struct {
 	filter *ecs.Filter3[From, To, Brightness]
 }
@@ -135,6 +149,7 @@ func (s *StarResetter) Update(w *ecs.World) {
 	}
 }
 
+// The StarLighter makes the stars brighter and brighter.
 type StarLighter struct {
 	filter *ecs.Filter1[Brightness]
 }
@@ -151,6 +166,7 @@ func (s *StarLighter) Update(w *ecs.World) {
 	}
 }
 
+// The StarDrawer renders the stars on screen.
 type StarDrawer struct {
 	filter *ecs.Filter3[From, To, Brightness]
 }

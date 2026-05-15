@@ -14,9 +14,14 @@ func main() {
 		StarsCount:   1024,
 		Speed:        32,
 	}
-	game := NewGame(s, NewStars(), NewUI())
+
+	game := NewGame(s,
+		NewStars(),
+		NewUI(),
+	)
 	ebiten.SetWindowSize(int(s.ScreenWidth), int(s.ScreenHeight))
 	ebiten.SetWindowTitle("Star speeder")
+
 	if err := ebiten.RunGame(game); err != nil {
 		log.Fatal(err)
 	}
