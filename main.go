@@ -8,8 +8,8 @@ import (
 
 func main() {
 	s := &Settings{
-		ScreenWidth:  1280,
-		ScreenHeight: 720,
+		ScreenWidth:  1024,
+		ScreenHeight: 726,
 		Scale:        16,
 		StarsCount:   1024,
 		Speed:        32,
