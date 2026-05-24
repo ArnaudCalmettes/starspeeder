@@ -36,7 +36,7 @@ type Brightness struct {
 	V float32
 }
 
-// Batch relation is used when creating or deleting batches of stars.
+// Batch relation helps creating and deleting batches of stars.
 type Batch struct {
 	ecs.RelationMarker
 }
@@ -45,7 +45,7 @@ type Batch struct {
 // with settings.StarsCount.
 // It typically creates or deletes stars by batches whose size grows or shrinks in powers of 2.
 type StarPopulator struct {
-	builder *ecs.Map4[From, To, Brightness, Batch]
+	mapper  *ecs.Map4[From, To, Brightness, Batch]
 	filter  *ecs.Filter4[From, To, Brightness, Batch]
 	batches []starBatch
 }
@@ -56,13 +56,14 @@ type starBatch struct {
 }
 
 func (s *StarPopulator) Initialize(w *ecs.World) {
-	s.builder = s.builder.New(w)
+	s.mapper = s.mapper.New(w)
 	s.filter = s.filter.New(w)
 }
 
 func (s *StarPopulator) Update(w *ecs.World) {
 	settings := ecs.GetResource[Settings](w)
 
+	// Reuse as many batches as possible.
 	starsCount := 0
 	cutIndex := -1
 	for i, batch := range s.batches {
@@ -72,23 +73,24 @@ func (s *StarPopulator) Update(w *ecs.World) {
 		}
 		starsCount += batch.Size
 	}
+
+	// Remove batches with higher indices if we have too many stars.
 	if cutIndex != -1 {
-		// Remove all batches that have too many stars.
 		for _, batch := range s.batches[cutIndex:] {
-			s.builder.RemoveBatch(s.filter.Batch(ecs.Rel[Batch](batch.ID)), nil)
+			s.mapper.RemoveBatch(s.filter.Batch(ecs.Rel[Batch](batch.ID)), nil)
 			w.RemoveEntity(batch.ID)
 		}
 		s.batches = s.batches[:cutIndex]
 	}
 
+	// Add a new batch of stars to match the desired count.
 	if starsCount < settings.StarsCount {
-		// Add a new batch of stars to match the desired count.
 		id := w.NewEntity()
 		size := settings.StarsCount - starsCount
 		init := func(_ ecs.Entity, from *From, to *To, br *Brightness, _ *Batch) {
 			initStar(from, to, br, settings)
 		}
-		s.builder.NewBatchFn(size, init, ecs.Rel[Batch](id))
+		s.mapper.NewBatchFn(size, init, ecs.Rel[Batch](id))
 		s.batches = append(s.batches, starBatch{id, size})
 	}
 }
